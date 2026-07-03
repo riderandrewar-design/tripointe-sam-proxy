@@ -243,7 +243,7 @@ function setOppStatus(id, status) {
 }
 
 async function fetchPrimes() {
-  document.getElementById("prime-status").innerHTML = '<div class="msg msg-info">⏳ Researching recent awardees in your NAICS codes...</div>';
+  document.getElementById("prime-status").innerHTML = '<div class="msg msg-info">⏳ Researching prime contractors via AI + web search — this takes up to 60 seconds, please wait...</div>';
   document.getElementById("prime-list").innerHTML = "";
   try {
     const res = await fetch("/primes");
