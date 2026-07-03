@@ -2,11 +2,31 @@ const express = require("express");
 const cors = require("cors");
 const fetch = require("node-fetch");
 const path = require("path");
+const { Pool } = require("pg");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 const SAM_API_KEY = process.env.SAM_API_KEY;
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
+
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: { rejectUnauthorized: false }
+});
+
+// Create statuses table if it doesn't exist
+pool.query(`
+  CREATE TABLE IF NOT EXISTS statuses (
+    id TEXT PRIMARY KEY,
+    type TEXT NOT NULL,
+    status TEXT NOT NULL,
+    updated_at TIMESTAMP DEFAULT NOW()
+  )
+`).then(function() {
+  console.log("Database ready");
+}).catch(function(err) {
+  console.error("Database init error:", err.message);
+});
 
 app.use((req, res, next) => {
   res.header("Access-Control-Allow-Origin", "*");
@@ -19,7 +39,39 @@ app.use((req, res, next) => {
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
 
-app.get("/health", function(_req, res) {
+// Get all statuses
+app.get("/statuses", async function(req, res) {
+  try {
+    var result = await pool.query("SELECT id, type, status FROM statuses");
+    var statuses = {};
+    result.rows.forEach(function(row) {
+      statuses[row.id] = { status: row.status, type: row.type };
+    });
+    res.json(statuses);
+  } catch(err) {
+    console.error("Statuses error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Save a status
+app.post("/statuses", async function(req, res) {
+  try {
+    var id = req.body.id;
+    var type = req.body.type;
+    var status = req.body.status;
+    await pool.query(
+      "INSERT INTO statuses (id, type, status) VALUES ($1, $2, $3) ON CONFLICT (id) DO UPDATE SET status = $3, updated_at = NOW()",
+      [id, type, status]
+    );
+    res.json({ ok: true });
+  } catch(err) {
+    console.error("Save status error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+
   res.json({ status: "ok", key: SAM_API_KEY ? "set" : "missing", anthropic: ANTHROPIC_API_KEY ? "set" : "missing" });
 });
 
