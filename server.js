@@ -135,48 +135,46 @@ app.get("/primes", async (req, res) => {
     const data   = JSON.parse(text);
     const awards = data.opportunitiesData || [];
 
-    const defenseAgencies = [
-      "DEFENSE","DEPT OF DEFENSE","ARMY","NAVY","AIR FORCE","MARINE",
-      "INTELLIGENCE","DIA","NSA","NGA","DARPA","SOCOM","DISA","CYBERCOM",
-      "NATIONAL RECONNAISSANCE","NRO","ODNI","CIA","DEFENSE INTELLIGENCE",
-      "DEFENSE INFORMATION","SPECIAL OPERATIONS","SPACE FORCE","STRATCOM"
+    const defenseKeywords = [
+      "DEFENSE","ARMY","NAVY","AIR FORCE","MARINE","INTELLIGENCE",
+      "DIA","NSA","NGA","DARPA","SOCOM","DISA","CYBERCOM",
+      "RECONNAISSANCE","NRO","ODNI","SPECIAL OPERATIONS","SPACE FORCE","STRATCOM"
     ];
 
     const seen   = {};
-    const primes = [];
+    const defense = [];
+    const other   = [];
 
-    // Strict pass — defense and intel agencies only
     for (const award of awards) {
-      if (primes.length >= 3) break;
       const awardee = award.award && award.award.awardee;
       if (!awardee || !awardee.name) continue;
       const name = awardee.name.trim();
       if (seen[name]) continue;
+      seen[name] = true;
 
       const agency    = (award.fullParentPathName || "").toUpperCase();
-      const isDefense = defenseAgencies.some(d => agency.includes(d));
-      if (!isDefense) continue;
+      const isDefense = defenseKeywords.some(d => agency.includes(d));
 
-      seen[name] = true;
-      const signals = ["defense award"];
+      const signals = [];
+      if (isDefense) signals.push("defense award");
+      else signals.push("federal award");
       if (award.naicsCode) signals.push("NAICS " + award.naicsCode);
-      if (agency.includes("INTELLIGENCE") || agency.includes("DIA") || agency.includes("NSA") || agency.includes("NGA") || agency.includes("NRO") || agency.includes("ODNI")) {
-        signals.unshift("intel agency");
-      }
 
-      primes.push({
-        id:        "p" + Date.now() + primes.length,
+      const entry = {
+        id:        "p" + Date.now() + (defense.length + other.length),
         name,
-        reason:    "Recently awarded \"" + (award.title || "IT contract") + "\" with " + (award.fullParentPathName || "defense agency").split(".")[0],
+        reason:    "Recently awarded \"" + (award.title || "IT contract") + "\" with " + (award.fullParentPathName || "federal agency").split(".")[0],
         signals:   signals.slice(0, 3),
         url:       null,
         awardDate: award.postedDate || ""
-      });
+      };
+
+      if (isDefense) defense.push(entry);
+      else other.push(entry);
     }
 
-    if (primes.length === 0) {
-      return res.json([{ id: "none", name: "No defense/intel awardees found", reason: "Try expanding the date range or check back tomorrow as new awards are posted daily.", signals: [], url: null, awardDate: "" }]);
-    }
+    // Defense/intel first, fill remainder with other federal IT awardees
+    const primes = defense.concat(other).slice(0, 3);
 
   } catch (err) {
     console.error("Primes error:", err.message);
