@@ -33,13 +33,18 @@ app.get("/opportunities", async (req, res) => {
              dd.getDate().toString().padStart(2,"0") + "/" +
              dd.getFullYear();
     };
-    const postedFrom = req.query.postedFrom || fmt(today - 30 * 86400000);
-    const postedTo   = req.query.postedTo   || fmt(today);
-    const naicsCode  = req.query.naicsCode  || "541512,541519,541330,541690";
-    const limit      = req.query.limit      || "10";
-    const offset     = req.query.offset     || "0";
+    const postedFrom     = req.query.postedFrom     || fmt(today - 30 * 86400000);
+    const postedTo       = req.query.postedTo       || fmt(today);
+    const naicsCode      = req.query.naicsCode      || "541512,541519,541330,541690";
+    const limit          = req.query.limit          || "25";
+    const offset         = req.query.offset         || "0";
+    const keyword        = req.query.q              || "";
+    const typeOfSetAside = req.query.typeOfSetAside || "";
 
-    const params = new URLSearchParams({ api_key: SAM_API_KEY, postedFrom, postedTo, naicsCode, limit, offset });
+    const paramObj = { api_key: SAM_API_KEY, postedFrom, postedTo, naicsCode, limit, offset };
+    if (keyword) paramObj.q = keyword;
+    if (typeOfSetAside) paramObj.typeOfSetAside = typeOfSetAside;
+    const params = new URLSearchParams(paramObj);
     const url = "https://api.sam.gov/opportunities/v2/search?" + params.toString();
     console.log("Fetching opportunities:", url);
 
