@@ -10,7 +10,7 @@ const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false }
+  ssl: process.env.DATABASE_URL && process.env.DATABASE_URL.includes("localhost") ? false : { rejectUnauthorized: false }
 });
 
 app.use(function(req, res, next) {
@@ -129,7 +129,10 @@ app.get("/primes", async function(req, res) {
 });
 
 async function startServer() {
+  console.log("DATABASE_URL present:", !!process.env.DATABASE_URL);
   try {
+    await pool.query("SELECT 1");
+    console.log("Database connection OK");
     await pool.query("CREATE TABLE IF NOT EXISTS statuses (id TEXT PRIMARY KEY, type TEXT NOT NULL, status TEXT NOT NULL, updated_at TIMESTAMP DEFAULT NOW())");
     console.log("Database ready");
   } catch(err) {
