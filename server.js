@@ -33,8 +33,9 @@ app.get("/opportunities", async (req, res) => {
              dd.getFullYear();
     };
 
-    const postedFrom     = req.query.postedFrom     || fmt(today - 30 * 86400000);
-    const postedTo       = req.query.postedTo       || fmt(today);
+    // Decode dates in case they arrive double-encoded
+    const postedFrom     = decodeURIComponent(req.query.postedFrom || fmt(today - 30 * 86400000));
+    const postedTo       = decodeURIComponent(req.query.postedTo   || fmt(today));
     const naicsCode      = req.query.naicsCode      || "541512,541519,541330,541690";
     const typeOfSetAside = req.query.typeOfSetAside || "";
     const keyword        = (req.query.q             || "").toLowerCase().trim();
