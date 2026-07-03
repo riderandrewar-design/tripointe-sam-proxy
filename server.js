@@ -60,7 +60,12 @@ app.get("/opportunities", async (req, res) => {
     console.log("Fetching opportunities:", url);
     console.log("Params:", JSON.stringify(paramObj));
 
-    const samRes = await fetch(url);
+    const samRes = await fetch(url, {
+      headers: {
+        "Accept": "application/json",
+        "Accept-Encoding": "identity"
+      }
+    });
     const text   = await samRes.text();
 
     if (!samRes.ok) {
