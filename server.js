@@ -58,6 +58,7 @@ app.get("/opportunities", async (req, res) => {
 
     const url = "https://api.sam.gov/opportunities/v2/search?" + new URLSearchParams(paramObj).toString();
     console.log("Fetching opportunities:", url);
+    console.log("Params:", JSON.stringify(paramObj));
 
     const samRes = await fetch(url);
     const text   = await samRes.text();
