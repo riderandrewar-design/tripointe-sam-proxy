@@ -54,29 +54,4 @@ app.get("/opportunities", async (req, res) => {
   }
 });
 
-app.get("/primes", async (req, res) => {
-  try {
-    const prompt = "You are a government contracting BD researcher. TriPointe Technologies is a 12-person small business offering cybersecurity, systems administration, application development, and data analytics, currently serving as a subcontractor on defense and intelligence programs. Identify exactly 3 prime contractors for teaming/subcontracting outreach. They must hold OASIS, STARS III, or CIO-SP3 vehicles OR have recent defense/intelligence awards OR be actively hiring cleared cybersecurity/IT/data SMEs. Return ONLY a JSON array with exactly 3 objects, each with: id (string), name (company name), reason (1 sentence), signals (array of 2-3 strings from: teaming page, OASIS, STARS III, CIO-SP3, defense award, cleared hiring), url (teaming or careers URL or null). No markdown, no preamble.";
-    const apiRes = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": process.env.ANTHROPIC_API_KEY,
-        "anthropic-version": "2023-06-01"
-      },
-      body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
-        max_tokens: 1000,
-        messages: [{ role: "user", content: prompt }]
-      })
-    });
-    const data = await apiRes.json();
-    const text = (data.content || []).filter(b => b.type === "text").map(b => b.text).join("");
-    const clean = text.replace(/```json|```/g, "").trim();
-    res.json(JSON.parse(clean));
-  } catch(err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
 app.listen(PORT, () => console.log("Server running on port " + PORT));
