@@ -1,5 +1,4 @@
 const express = require("express");
-const cors = require("cors");
 const fetch = require("node-fetch");
 const path = require("path");
 const { Pool } = require("pg");
@@ -14,23 +13,17 @@ const pool = new Pool({
   ssl: { rejectUnauthorized: false }
 });
 
-// Create statuses table if it doesn't exist
-pool.query(`
-  CREATE TABLE IF NOT EXISTS statuses (
-    id TEXT PRIMARY KEY,
-    type TEXT NOT NULL,
-    status TEXT NOT NULL,
-    updated_at TIMESTAMP DEFAULT NOW()
-  )
-`).then(function() {
+pool.query(
+  "CREATE TABLE IF NOT EXISTS statuses (id TEXT PRIMARY KEY, type TEXT NOT NULL, status TEXT NOT NULL, updated_at TIMESTAMP DEFAULT NOW())"
+).then(function() {
   console.log("Database ready");
 }).catch(function(err) {
   console.error("Database init error:", err.message);
 });
 
-app.use((req, res, next) => {
+app.use(function(req, res, next) {
   res.header("Access-Control-Allow-Origin", "*");
-  res.header("Access-Control-Allow-Methods", "GET, OPTIONS");
+  res.header("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   res.header("Access-Control-Allow-Headers", "Content-Type");
   if (req.method === "OPTIONS") return res.sendStatus(200);
   next();
@@ -39,7 +32,10 @@ app.use((req, res, next) => {
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
 
-// Get all statuses
+app.get("/health", function(_req, res) {
+  res.json({ status: "ok", key: SAM_API_KEY ? "set" : "missing", anthropic: ANTHROPIC_API_KEY ? "set" : "missing" });
+});
+
 app.get("/statuses", async function(req, res) {
   try {
     var result = await pool.query("SELECT id, type, status FROM statuses");
@@ -54,7 +50,6 @@ app.get("/statuses", async function(req, res) {
   }
 });
 
-// Save a status
 app.post("/statuses", async function(req, res) {
   try {
     var id = req.body.id;
@@ -69,10 +64,6 @@ app.post("/statuses", async function(req, res) {
     console.error("Save status error:", err.message);
     res.status(500).json({ error: err.message });
   }
-});
-
-
-  res.json({ status: "ok", key: SAM_API_KEY ? "set" : "missing", anthropic: ANTHROPIC_API_KEY ? "set" : "missing" });
 });
 
 app.get("/opportunities", async function(req, res) {
@@ -95,7 +86,7 @@ app.get("/opportunities", async function(req, res) {
     var fetchOffset = keyword ? 0   : pageOffset;
 
     var paramObj = {
-      api_key:   SAM_API_KEY,
+      api_key:    SAM_API_KEY,
       postedFrom: postedFrom,
       postedTo:   postedTo,
       naicsCode:  naicsCode,
@@ -174,7 +165,6 @@ app.get("/primes", async function(req, res) {
 
     var text = (responseData.content || []).filter(function(b) { return b.type === "text"; }).map(function(b) { return b.text; }).join("");
     if (!text) throw new Error("No text in response");
-    // Extract JSON array from anywhere in the response
     var match = text.match(/\[[\s\S]*\]/);
     if (!match) throw new Error("No JSON array found in: " + text.slice(0, 200));
     var parsed = JSON.parse(match[0]);
