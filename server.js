@@ -106,7 +106,7 @@ app.get("/primes", async function(req, res) {
         "anthropic-version": "2023-06-01"
       },
       body: JSON.stringify({
-        model:      "claude-sonnet-4-20250514",
+        model:      "claude-sonnet-4-5-20251001",
         max_tokens: 1500,
         tools: [{ type: "web_search_20250305", name: "web_search" }],
         messages: [{ role: "user", content: prompt }]
@@ -116,9 +116,12 @@ app.get("/primes", async function(req, res) {
     clearTimeout(timeout);
 
     var responseData = await apiRes.json();
-    if (responseData.error) throw new Error(responseData.error.message || JSON.stringify(responseData.error));
+    console.log("Anthropic response type:", responseData.type, "error:", JSON.stringify(responseData.error));
+    if (responseData.error) throw new Error(JSON.stringify(responseData.error));
+    if (responseData.type === "error") throw new Error(JSON.stringify(responseData));
 
     var text = (responseData.content || []).filter(function(b) { return b.type === "text"; }).map(function(b) { return b.text; }).join("");
+    if (!text) throw new Error("No text in response: " + JSON.stringify(responseData.content));
     var clean = text.replace(/```json|```/g, "").trim();
     var parsed = JSON.parse(clean);
 
