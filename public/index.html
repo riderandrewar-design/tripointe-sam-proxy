@@ -129,8 +129,29 @@ var primes = [];
 var totalRecords = 0;
 var currentOffset = 0;
 var currentFilter = "All";
-var oppStatuses = JSON.parse(localStorage.getItem("oppStatuses") || "{}");
-var primeStatuses = JSON.parse(localStorage.getItem("primeStatuses") || "{}");
+var oppStatuses = {};
+var primeStatuses = {};
+
+// Load all statuses from database on startup
+function loadStatuses(callback) {
+  fetch(PROXY + "/statuses").then(function(res) { return res.json(); }).then(function(data) {
+    Object.keys(data).forEach(function(id) {
+      if (data[id].type === "opp") oppStatuses[id] = data[id].status;
+      if (data[id].type === "prime") primeStatuses[id] = data[id].status;
+    });
+    if (callback) callback();
+  }).catch(function() {
+    if (callback) callback();
+  });
+}
+
+function saveStatus(id, type, status) {
+  fetch(PROXY + "/statuses", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id: id, type: type, status: status })
+  }).catch(function(e) { console.error("Save status error:", e.message); });
+}
 
 function switchTab(tab) {
   document.getElementById("tab-opps").style.display = tab === "opps" ? "" : "none";
@@ -141,8 +162,8 @@ function switchTab(tab) {
   if (tab === "primes" && primes.length === 0) fetchPrimes();
 }
 
-function saveOppStatuses() { localStorage.setItem("oppStatuses", JSON.stringify(oppStatuses)); }
-function savePrimeStatuses() { localStorage.setItem("primeStatuses", JSON.stringify(primeStatuses)); }
+function saveOppStatuses() {}
+function savePrimeStatuses() {}
 
 function updateTiles() {
   document.getElementById("tile-pursuing").textContent = Object.values(oppStatuses).filter(function(s) { return s === "Pursuing"; }).length;
@@ -233,7 +254,7 @@ function renderOpps() {
 
 function setOppStatus(id, status) {
   oppStatuses[id] = status;
-  saveOppStatuses();
+  saveStatus(id, "opp", status);
   updateTiles();
 }
 
@@ -257,7 +278,7 @@ function fetchPrimes() {
 
 function setPrimeStatus(id, status) {
   primeStatuses[id] = status;
-  savePrimeStatuses();
+  saveStatus(id, "prime", status);
   renderPrimes();
   updateTiles();
 }
@@ -288,7 +309,7 @@ function renderPrimes() {
   }).join("");
 }
 
-fetchOpps(0);
+loadStatuses(function() { fetchOpps(0); });
 </script>
 </body>
 </html>
