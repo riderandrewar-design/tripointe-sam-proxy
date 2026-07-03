@@ -166,9 +166,19 @@ function saveOppStatuses() {}
 function savePrimeStatuses() {}
 
 function updateTiles() {
-  document.getElementById("tile-pursuing").textContent = Object.values(oppStatuses).filter(function(s) { return s === "Pursuing"; }).length;
-  document.getElementById("tile-watching").textContent = Object.values(oppStatuses).filter(function(s) { return s === "Watching"; }).length;
-  document.getElementById("tile-primes").textContent = primes.filter(function(p) { var pid = p.id || p.name; return primeStatuses[pid] === "Interested" || primeStatuses[pid] === "Outreach Pending"; }).length;
+  var pursuing = 0;
+  var watching = 0;
+  Object.keys(oppStatuses).forEach(function(id) {
+    if (oppStatuses[id] === "Pursuing") pursuing++;
+    if (oppStatuses[id] === "Watching") watching++;
+  });
+  var primeTargets = 0;
+  Object.keys(primeStatuses).forEach(function(id) {
+    if (primeStatuses[id] === "Interested" || primeStatuses[id] === "Outreach Pending") primeTargets++;
+  });
+  document.getElementById("tile-pursuing").textContent = pursuing;
+  document.getElementById("tile-watching").textContent = watching;
+  document.getElementById("tile-primes").textContent = primeTargets;
 }
 
 function fmt(d) {
@@ -309,7 +319,7 @@ function renderPrimes() {
   }).join("");
 }
 
-loadStatuses(function() { fetchOpps(0); });
+loadStatuses(function() { updateTiles(); fetchOpps(0); });
 </script>
 </body>
 </html>
