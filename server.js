@@ -90,7 +90,7 @@ app.get("/primes", async function(req, res) {
   try {
     console.log("Primes: calling Anthropic API with web search");
 
-    var prompt = "You are a government contracting BD researcher. TriPointe Technologies is a 12-person small business specializing in cybersecurity, systems administration, application development, and data analytics. They currently serve as a subcontractor on defense and intelligence programs. Identify exactly 3 prime contractors that TriPointe should consider for teaming or subcontracting outreach TODAY. Use web search to find current information. Selection criteria: must hold OASIS, STARS III, or CIO-SP3 vehicles OR have recent defense/intelligence contract awards OR be actively hiring cleared (TS/SCI full scope) cybersecurity, systems admin, app dev, or data analytics SMEs. Return ONLY a valid JSON array with exactly 3 objects and no markdown or preamble. Each object must have: id (unique short string), name (company name), reason (1 sentence why they fit TriPointe), signals (array of 2-4 strings from: teaming page, OASIS, STARS III, CIO-SP3, defense award, intel award, cleared hiring, recent news), url (teaming or careers page URL or null), awardDate (most recent award date YYYY-MM-DD or null).";
+    var prompt = "You are a government contracting BD researcher. TriPointe Technologies is a 12-person small business specializing in cybersecurity, systems administration, application development, and data analytics. They serve as a subcontractor on defense and intelligence programs. Identify exactly 3 prime contractors for teaming outreach. They must hold OASIS, STARS III, or CIO-SP3 vehicles OR have recent defense/intelligence awards OR be hiring cleared TS/SCI cybersecurity or IT SMEs. YOU MUST RESPOND WITH ONLY A JSON ARRAY. NO OTHER TEXT. NO PREAMBLE. NO EXPLANATION. Start your response with [ and end with ]. Each object must have: id (string), name (string), reason (string), signals (array of strings), url (string or null), awardDate (string or null).";
 
     var controller = new AbortController();
     var timeout = setTimeout(function() { controller.abort(); }, 120000);
@@ -121,9 +121,11 @@ app.get("/primes", async function(req, res) {
     if (responseData.type === "error") throw new Error(JSON.stringify(responseData));
 
     var text = (responseData.content || []).filter(function(b) { return b.type === "text"; }).map(function(b) { return b.text; }).join("");
-    if (!text) throw new Error("No text in response: " + JSON.stringify(responseData.content));
-    var clean = text.replace(/```json|```/g, "").trim();
-    var parsed = JSON.parse(clean);
+    if (!text) throw new Error("No text in response");
+    // Extract JSON array from anywhere in the response
+    var match = text.match(/\[[\s\S]*\]/);
+    if (!match) throw new Error("No JSON array found in: " + text.slice(0, 200));
+    var parsed = JSON.parse(match[0]);
 
     res.json(Array.isArray(parsed) ? parsed : []);
 
