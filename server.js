@@ -100,6 +100,8 @@ app.get("/primes", async function(req, res) {
       signal: controller.signal,
       headers: {
         "Content-Type":      "application/json",
+        "Accept":            "application/json",
+        "Accept-Encoding":   "identity",
         "x-api-key":         ANTHROPIC_API_KEY,
         "anthropic-version": "2023-06-01"
       },
