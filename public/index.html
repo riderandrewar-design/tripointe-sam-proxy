@@ -147,7 +147,7 @@ function savePrimeStatuses() { localStorage.setItem("primeStatuses", JSON.string
 function updateTiles() {
   document.getElementById("tile-pursuing").textContent = Object.values(oppStatuses).filter(function(s) { return s === "Pursuing"; }).length;
   document.getElementById("tile-watching").textContent = Object.values(oppStatuses).filter(function(s) { return s === "Watching"; }).length;
-  document.getElementById("tile-primes").textContent = primes.filter(function(p) { return primeStatuses[p.id] === "Interested" || primeStatuses[p.id] === "Outreach Pending"; }).length;
+  document.getElementById("tile-primes").textContent = primes.filter(function(p) { var pid = p.id || p.name; return primeStatuses[pid] === "Interested" || primeStatuses[pid] === "Outreach Pending"; }).length;
 }
 
 function fmt(d) {
@@ -266,7 +266,8 @@ function renderPrimes() {
   var list = document.getElementById("prime-list");
   if (primes.length === 0) { list.innerHTML = '<p class="msg-empty">No primes loaded. Click Refresh.</p>'; return; }
   list.innerHTML = primes.map(function(p) {
-    var status = primeStatuses[p.id] || "Unreviewed";
+    var pid = p.id || p.name;
+    var status = primeStatuses[pid] || "Unreviewed";
     var showOutreach = status === "Interested" || status === "Outreach Pending";
     var signals = (p.signals || []).map(function(s) { return '<span class="badge badge-purple">' + s + '</span>'; }).join("");
     var outreachPrompt = showOutreach
@@ -280,7 +281,7 @@ function renderPrimes() {
       (p.awardDate ? '<p class="card-meta">Award date: ' + p.awardDate + '</p>' : '') +
       outreachPrompt +
       '</div><div class="card-actions">' +
-      '<select onchange="setPrimeStatus(\'' + p.id + '\', this.value)">' +
+      '<select onchange="setPrimeStatus(\'' + pid + '\', this.value)">' +
         ['Unreviewed','Interested','Outreach Pending','Pass'].map(function(s) { return '<option' + (s === status ? ' selected' : '') + '>' + s + '</option>'; }).join('') +
       '</select>' +
       '</div></div></div>';
