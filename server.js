@@ -9,7 +9,7 @@ const SAM_API_KEY = process.env.SAM_API_KEY;
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 
 const pool = new Pool({
-  connectionString: process.env.PG_URL || process.env.DATABASE_URL,
+  connectionString: process.env.DATABASE_URL,
   ssl: { rejectUnauthorized: false }
 });
 
@@ -28,6 +28,7 @@ app.get("/health", function(_req, res) {
   res.json({ status: "ok", key: SAM_API_KEY ? "set" : "missing", anthropic: ANTHROPIC_API_KEY ? "set" : "missing" });
 });
 
+// Load all statuses
 app.get("/statuses", async function(req, res) {
   try {
     var result = await pool.query("SELECT id, type, status FROM statuses");
@@ -42,6 +43,7 @@ app.get("/statuses", async function(req, res) {
   }
 });
 
+// Save a status
 app.post("/statuses", async function(req, res) {
   try {
     var id = req.body.id;
@@ -58,6 +60,47 @@ app.post("/statuses", async function(req, res) {
   }
 });
 
+// Load all saved primes
+app.get("/primes/saved", async function(req, res) {
+  try {
+    var result = await pool.query("SELECT * FROM primes ORDER BY first_seen DESC");
+    res.json(result.rows);
+  } catch(err) {
+    console.error("Load primes error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Save a prime record
+app.post("/primes/saved", async function(req, res) {
+  try {
+    var p = req.body;
+    var pid = p.name.trim().toLowerCase().replace(/\s+/g, "_");
+    await pool.query(
+      "INSERT INTO primes (id, name, reason, signals, url, award_date, first_seen) VALUES ($1, $2, $3, $4, $5, $6, NOW()) ON CONFLICT (id) DO UPDATE SET reason = $3, signals = $4, url = $5, award_date = $6",
+      [pid, p.name, p.reason, JSON.stringify(p.signals || []), p.url || null, p.awardDate || null]
+    );
+    res.json({ ok: true });
+  } catch(err) {
+    console.error("Save prime error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Delete a prime
+app.post("/primes/delete", async function(req, res) {
+  try {
+    var id = req.body.id;
+    await pool.query("DELETE FROM primes WHERE id = $1", [id]);
+    await pool.query("DELETE FROM statuses WHERE id = $1", [id]);
+    res.json({ ok: true });
+  } catch(err) {
+    console.error("Delete prime error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Fetch opportunities
 app.get("/opportunities", async function(req, res) {
   try {
     var today = new Date();
@@ -99,6 +142,7 @@ app.get("/opportunities", async function(req, res) {
   }
 });
 
+// AI prime research
 app.get("/primes", async function(req, res) {
   try {
     console.log("Primes: calling Anthropic API with web search");
@@ -113,7 +157,6 @@ app.get("/primes", async function(req, res) {
     });
     clearTimeout(timeout);
     var responseData = await apiRes.json();
-    console.log("Anthropic response type:", responseData.type, "error:", JSON.stringify(responseData.error));
     if (responseData.error) throw new Error(JSON.stringify(responseData.error));
     if (responseData.type === "error") throw new Error(JSON.stringify(responseData));
     var text = (responseData.content || []).filter(function(b) { return b.type === "text"; }).map(function(b) { return b.text; }).join("");
@@ -130,11 +173,11 @@ app.get("/primes", async function(req, res) {
 
 async function startServer() {
   console.log("DATABASE_URL present:", !!process.env.DATABASE_URL);
-  console.log("PG_URL present:", !!process.env.PG_URL);
   try {
     await pool.query("SELECT 1");
     console.log("Database connection OK");
     await pool.query("CREATE TABLE IF NOT EXISTS statuses (id TEXT PRIMARY KEY, type TEXT NOT NULL, status TEXT NOT NULL, updated_at TIMESTAMP DEFAULT NOW())");
+    await pool.query("CREATE TABLE IF NOT EXISTS primes (id TEXT PRIMARY KEY, name TEXT NOT NULL, reason TEXT, signals TEXT, url TEXT, award_date TEXT, first_seen TIMESTAMP DEFAULT NOW())");
     console.log("Database ready");
   } catch(err) {
     console.error("Database init error:", err.message);
