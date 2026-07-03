@@ -36,13 +36,16 @@ app.get("/opportunities", async (req, res) => {
     const postedFrom     = req.query.postedFrom     || fmt(today - 30 * 86400000);
     const postedTo       = req.query.postedTo       || fmt(today);
     const naicsCode      = req.query.naicsCode      || "541512,541519,541330,541690";
-    const limit          = req.query.limit          || "25";
-    const offset         = req.query.offset         || "0";
-    const keyword        = req.query.q              || "";
     const typeOfSetAside = req.query.typeOfSetAside || "";
+    const keyword        = (req.query.q || "").toLowerCase().trim();
+    const pageLimit      = parseInt(req.query.limit) || 25;
+    const pageOffset     = parseInt(req.query.offset) || 0;
 
-    const paramObj = { api_key: SAM_API_KEY, postedFrom, postedTo, naicsCode, limit, offset };
-    if (keyword) paramObj.q = keyword;
+    // Fetch a large batch for keyword filtering
+    const fetchLimit = keyword ? 250 : pageLimit;
+    const fetchOffset = keyword ? 0 : pageOffset;
+
+    const paramObj = { api_key: SAM_API_KEY, postedFrom, postedTo, naicsCode, limit: fetchLimit, offset: fetchOffset };
     if (typeOfSetAside) paramObj.typeOfSetAside = typeOfSetAside;
     const params = new URLSearchParams(paramObj);
     const url = "https://api.sam.gov/opportunities/v2/search?" + params.toString();
@@ -53,7 +56,27 @@ app.get("/opportunities", async (req, res) => {
     if (!samRes.ok) {
       return res.status(samRes.status).json({ error: "SAM.gov error " + samRes.status, detail: text.slice(0,300) });
     }
-    res.json(JSON.parse(text));
+    let opportunities = data.opportunitiesData || [];
+
+    // Server-side keyword filtering across title, description, and agency
+    if (keyword) {
+      const terms = keyword.split(/\s+/).filter(Boolean);
+      opportunities = opportunities.filter(o => {
+        const haystack = [
+          o.title || "",
+          o.fullParentPathName || "",
+          o.naicsCode || "",
+          o.typeOfSetAsideDescription || ""
+        ].join(" ").toLowerCase();
+        return terms.every(term => haystack.includes(term));
+      });
+    }
+
+    // Apply pagination to filtered results
+    const totalFiltered = keyword ? opportunities.length : data.totalRecords;
+    const paginated = keyword ? opportunities.slice(pageOffset, pageOffset + pageLimit) : opportunities;
+
+    res.json({ ...data, opportunitiesData: paginated, totalRecords: totalFiltered });
   } catch (err) {
     console.error("Opportunities error:", err.message);
     res.status(500).json({ error: err.message });
