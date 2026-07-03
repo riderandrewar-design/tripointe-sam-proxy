@@ -1,4 +1,3 @@
-// server.js — SAM.gov CORS proxy + dashboard for TriPointe BD
 const express = require("express");
 const cors = require("cors");
 const fetch = require("node-fetch");
@@ -7,6 +6,7 @@ const path = require("path");
 const app = express();
 const PORT = process.env.PORT || 3000;
 const SAM_API_KEY = process.env.SAM_API_KEY;
+const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
 
 app.use((req, res, next) => {
   res.header("Access-Control-Allow-Origin", "*");
@@ -19,174 +19,113 @@ app.use((req, res, next) => {
 app.use(express.json());
 app.use(express.static(path.join(__dirname, "public")));
 
-app.get("/health", (_req, res) => {
-  res.json({ status: "ok", key: SAM_API_KEY ? "set" : "missing" });
+app.get("/health", function(_req, res) {
+  res.json({ status: "ok", key: SAM_API_KEY ? "set" : "missing", anthropic: ANTHROPIC_API_KEY ? "set" : "missing" });
 });
 
-app.get("/opportunities", async (req, res) => {
+app.get("/opportunities", async function(req, res) {
   try {
-    const today = new Date();
-    const fmt = d => {
-      const dd = new Date(d);
-      return (dd.getMonth()+1).toString().padStart(2,"0") + "/" +
-             dd.getDate().toString().padStart(2,"0") + "/" +
-             dd.getFullYear();
-    };
+    var today = new Date();
+    function fmt(d) {
+      var dd = new Date(d);
+      return (dd.getMonth()+1).toString().padStart(2,"0") + "/" + dd.getDate().toString().padStart(2,"0") + "/" + dd.getFullYear();
+    }
 
-    // Decode dates in case they arrive double-encoded
-    const postedFrom     = decodeURIComponent(req.query.postedFrom || fmt(today - 30 * 86400000));
-    const postedTo       = decodeURIComponent(req.query.postedTo   || fmt(today));
-    const naicsCode      = req.query.naicsCode      || "541512,541519,541330,541690";
-    const typeOfSetAside = req.query.typeOfSetAside || "";
-    const keyword        = (req.query.q             || "").toLowerCase().trim();
-    const pageLimit      = parseInt(req.query.limit) || 25;
-    const pageOffset     = parseInt(req.query.offset) || 0;
+    var postedFrom     = decodeURIComponent(req.query.postedFrom || fmt(today - 30 * 86400000));
+    var postedTo       = decodeURIComponent(req.query.postedTo   || fmt(today));
+    var naicsCode      = req.query.naicsCode      || "541512,541519,541330,541690";
+    var typeOfSetAside = req.query.typeOfSetAside || "";
+    var keyword        = (req.query.q             || "").toLowerCase().trim();
+    var pageLimit      = parseInt(req.query.limit) || 25;
+    var pageOffset     = parseInt(req.query.offset) || 0;
 
-    // When keyword filtering, fetch a large batch server-side
-    const fetchLimit  = keyword ? 250 : pageLimit;
-    const fetchOffset = keyword ? 0   : pageOffset;
+    var fetchLimit  = keyword ? 250 : pageLimit;
+    var fetchOffset = keyword ? 0   : pageOffset;
 
-    const paramObj = {
+    var paramObj = {
       api_key:   SAM_API_KEY,
-      postedFrom,
-      postedTo,
-      naicsCode,
-      limit:     String(fetchLimit),
-      offset:    String(fetchOffset)
+      postedFrom: postedFrom,
+      postedTo:   postedTo,
+      naicsCode:  naicsCode,
+      limit:      String(fetchLimit),
+      offset:     String(fetchOffset)
     };
     if (typeOfSetAside) paramObj.typeOfSetAside = typeOfSetAside;
 
-    const url = "https://api.sam.gov/opportunities/v2/search?" + new URLSearchParams(paramObj).toString();
+    var url = "https://api.sam.gov/opportunities/v2/search?" + new URLSearchParams(paramObj).toString();
     console.log("Fetching opportunities:", url);
-    console.log("Params:", JSON.stringify(paramObj));
 
-    const samRes = await fetch(url, {
-      headers: {
-        "Accept": "application/json",
-        "Accept-Encoding": "identity"
-      }
+    var samRes = await fetch(url, {
+      headers: { "Accept": "application/json", "Accept-Encoding": "identity" }
     });
-    const text   = await samRes.text();
+    var text = await samRes.text();
 
     if (!samRes.ok) {
-      return res.status(samRes.status).json({
-        error:  "SAM.gov error " + samRes.status,
-        detail: text.slice(0, 300)
-      });
+      return res.status(samRes.status).json({ error: "SAM.gov error " + samRes.status, detail: text.slice(0,300) });
     }
 
-    const data = JSON.parse(text);
-    let opportunities = data.opportunitiesData || [];
+    var data = JSON.parse(text);
+    var opportunities = data.opportunitiesData || [];
 
-    // Server-side keyword filtering across title and agency
     if (keyword) {
-      const terms = keyword.split(/\s+/).filter(Boolean);
-      opportunities = opportunities.filter(o => {
-        const haystack = [
-          o.title                      || "",
-          o.fullParentPathName         || "",
-          o.naicsCode                  || "",
-          o.typeOfSetAsideDescription  || ""
-        ].join(" ").toLowerCase();
-        return terms.every(term => haystack.includes(term));
+      var terms = keyword.split(/\s+/).filter(Boolean);
+      opportunities = opportunities.filter(function(o) {
+        var haystack = [o.title||"", o.fullParentPathName||"", o.naicsCode||"", o.typeOfSetAsideDescription||""].join(" ").toLowerCase();
+        return terms.every(function(term) { return haystack.includes(term); });
       });
     }
 
-    const totalFiltered = keyword ? opportunities.length : (data.totalRecords || 0);
-    const paginated     = keyword ? opportunities.slice(pageOffset, pageOffset + pageLimit) : opportunities;
+    var totalFiltered = keyword ? opportunities.length : (data.totalRecords || 0);
+    var paginated = keyword ? opportunities.slice(pageOffset, pageOffset + pageLimit) : opportunities;
 
-    res.json({
-      totalRecords:      totalFiltered,
-      opportunitiesData: paginated
-    });
+    res.json({ totalRecords: totalFiltered, opportunitiesData: paginated });
 
-  } catch (err) {
+  } catch(err) {
     console.error("Opportunities error:", err.message);
     res.status(500).json({ error: err.message });
   }
 });
 
-app.get("/primes", async (req, res) => {
+app.get("/primes", async function(req, res) {
   try {
-    const today = new Date();
-    const fmt = d => {
-      const dd = new Date(d);
-      return (dd.getMonth()+1).toString().padStart(2,"0") + "/" +
-             dd.getDate().toString().padStart(2,"0") + "/" +
-             dd.getFullYear();
-    };
+    console.log("Primes: calling Anthropic API with web search");
 
-    const params = new URLSearchParams({
-      api_key:    SAM_API_KEY,
-      postedFrom: fmt(today - 180 * 86400000),
-      postedTo:   fmt(today),
-      naicsCode:  "541512,541519,541330,541690",
-      limit:      "100",
-      offset:     "0",
-      ptype:      "a"
+    var prompt = "You are a government contracting BD researcher. TriPointe Technologies is a 12-person small business specializing in cybersecurity, systems administration, application development, and data analytics. They currently serve as a subcontractor on defense and intelligence programs. Identify exactly 3 prime contractors that TriPointe should consider for teaming or subcontracting outreach TODAY. Use web search to find current information. Selection criteria: must hold OASIS, STARS III, or CIO-SP3 vehicles OR have recent defense/intelligence contract awards OR be actively hiring cleared (TS/SCI full scope) cybersecurity, systems admin, app dev, or data analytics SMEs. Return ONLY a valid JSON array with exactly 3 objects and no markdown or preamble. Each object must have: id (unique short string), name (company name), reason (1 sentence why they fit TriPointe), signals (array of 2-4 strings from: teaming page, OASIS, STARS III, CIO-SP3, defense award, intel award, cleared hiring, recent news), url (teaming or careers page URL or null), awardDate (most recent award date YYYY-MM-DD or null).";
+
+    var controller = new AbortController();
+    var timeout = setTimeout(function() { controller.abort(); }, 120000);
+
+    var apiRes = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      signal: controller.signal,
+      headers: {
+        "Content-Type":      "application/json",
+        "x-api-key":         ANTHROPIC_API_KEY,
+        "anthropic-version": "2023-06-01"
+      },
+      body: JSON.stringify({
+        model:      "claude-sonnet-4-20250514",
+        max_tokens: 1500,
+        tools: [{ type: "web_search_20250305", name: "web_search" }],
+        messages: [{ role: "user", content: prompt }]
+      })
     });
 
-    const url = "https://api.sam.gov/opportunities/v2/search?" + params.toString();
-    console.log("Fetching primes (awards):", url);
+    clearTimeout(timeout);
 
-    const samRes = await fetch(url);
-    const text   = await samRes.text();
+    var responseData = await apiRes.json();
+    if (responseData.error) throw new Error(responseData.error.message || JSON.stringify(responseData.error));
 
-    if (!samRes.ok) {
-      return res.status(samRes.status).json({
-        error:  "SAM.gov awards error " + samRes.status,
-        detail: text.slice(0, 300)
-      });
-    }
+    var text = (responseData.content || []).filter(function(b) { return b.type === "text"; }).map(function(b) { return b.text; }).join("");
+    var clean = text.replace(/```json|```/g, "").trim();
+    var parsed = JSON.parse(clean);
 
-    const data   = JSON.parse(text);
-    const awards = data.opportunitiesData || [];
+    res.json(Array.isArray(parsed) ? parsed : []);
 
-    const defenseKeywords = [
-      "DEFENSE","ARMY","NAVY","AIR FORCE","MARINE","INTELLIGENCE",
-      "DIA","NSA","NGA","DARPA","SOCOM","DISA","CYBERCOM",
-      "RECONNAISSANCE","NRO","ODNI","SPECIAL OPERATIONS","SPACE FORCE","STRATCOM"
-    ];
-
-    const seen   = {};
-    const defense = [];
-    const other   = [];
-
-    for (const award of awards) {
-      const awardee = award.award && award.award.awardee;
-      if (!awardee || !awardee.name) continue;
-      const name = awardee.name.trim();
-      if (seen[name]) continue;
-      seen[name] = true;
-
-      const agency    = (award.fullParentPathName || "").toUpperCase();
-      const isDefense = defenseKeywords.some(d => agency.includes(d));
-
-      const signals = [];
-      if (isDefense) signals.push("defense award");
-      else signals.push("federal award");
-      if (award.naicsCode) signals.push("NAICS " + award.naicsCode);
-
-      const entry = {
-        id:        "p" + Date.now() + (defense.length + other.length),
-        name,
-        reason:    "Recently awarded \"" + (award.title || "IT contract") + "\" with " + (award.fullParentPathName || "federal agency").split(".")[0],
-        signals:   signals.slice(0, 3),
-        url:       null,
-        awardDate: award.postedDate || ""
-      };
-
-      if (isDefense) defense.push(entry);
-      else other.push(entry);
-    }
-
-    // Defense/intel first, fill remainder with other federal IT awardees
-    const primes = defense.concat(other).slice(0, 3);
-
-  } catch (err) {
+  } catch(err) {
     console.error("Primes error:", err.message);
     res.status(500).json({ error: err.message });
   }
 });
 
-app.listen(PORT, () => console.log("Server running on port " + PORT));
+app.listen(PORT, function() { console.log("Server running on port " + PORT); });
