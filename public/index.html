@@ -246,7 +246,7 @@ async function fetchPrimes() {
   document.getElementById("prime-status").innerHTML = '<div class="msg msg-info">⏳ Researching prime contractors via AI + web search — this takes up to 60 seconds, please wait...</div>';
   document.getElementById("prime-list").innerHTML = "";
   try {
-    const res = await fetch("/primes");
+    const res = await fetch(PROXY + "/primes");
     if (!res.ok) throw new Error("Server returned " + res.status);
     const data = await res.json();
     if (data.error) throw new Error(data.error);
