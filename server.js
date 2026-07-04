@@ -28,14 +28,12 @@ app.get("/health", function(_req, res) {
   res.json({ status: "ok", key: SAM_API_KEY ? "set" : "missing", anthropic: ANTHROPIC_API_KEY ? "set" : "missing" });
 });
 
-// Load all statuses
+// ── STATUSES ──────────────────────────────────────────────
 app.get("/statuses", async function(req, res) {
   try {
     var result = await pool.query("SELECT id, type, status FROM statuses");
     var statuses = {};
-    result.rows.forEach(function(row) {
-      statuses[row.id] = { status: row.status, type: row.type };
-    });
+    result.rows.forEach(function(row) { statuses[row.id] = { status: row.status, type: row.type }; });
     res.json(statuses);
   } catch(err) {
     console.error("Statuses error:", err.message);
@@ -43,15 +41,11 @@ app.get("/statuses", async function(req, res) {
   }
 });
 
-// Save a status
 app.post("/statuses", async function(req, res) {
   try {
-    var id = req.body.id;
-    var type = req.body.type;
-    var status = req.body.status;
     await pool.query(
       "INSERT INTO statuses (id, type, status) VALUES ($1, $2, $3) ON CONFLICT (id) DO UPDATE SET status = $3, updated_at = NOW()",
-      [id, type, status]
+      [req.body.id, req.body.type, req.body.status]
     );
     res.json({ ok: true });
   } catch(err) {
@@ -60,47 +54,42 @@ app.post("/statuses", async function(req, res) {
   }
 });
 
-// Load all saved primes
-app.get("/primes/saved", async function(req, res) {
+// ── OPPORTUNITIES ─────────────────────────────────────────
+app.get("/opportunities/saved", async function(req, res) {
   try {
-    var result = await pool.query("SELECT * FROM primes ORDER BY first_seen DESC");
+    var result = await pool.query("SELECT * FROM opportunities ORDER BY first_saved DESC");
     res.json(result.rows);
   } catch(err) {
-    console.error("Load primes error:", err.message);
+    console.error("Load opportunities error:", err.message);
     res.status(500).json({ error: err.message });
   }
 });
 
-// Save a prime record
-app.post("/primes/saved", async function(req, res) {
+app.post("/opportunities/saved", async function(req, res) {
   try {
-    var p = req.body;
-    var pid = p.name.trim().toLowerCase().replace(/\s+/g, "_");
+    var o = req.body;
     await pool.query(
-      "INSERT INTO primes (id, name, reason, signals, url, award_date, first_seen) VALUES ($1, $2, $3, $4, $5, $6, NOW()) ON CONFLICT (id) DO UPDATE SET reason = $3, signals = $4, url = $5, award_date = $6",
-      [pid, p.name, p.reason, JSON.stringify(p.signals || []), p.url || null, p.awardDate || null]
+      "INSERT INTO opportunities (notice_id, title, agency, naics_code, set_aside, type, response_deadline, ui_link, first_saved) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,NOW()) ON CONFLICT (notice_id) DO UPDATE SET title=$2, agency=$3, naics_code=$4, set_aside=$5, type=$6, response_deadline=$7, ui_link=$8",
+      [o.noticeId, o.title, o.agency, o.naicsCode, o.typeOfSetAsideDescription, o.type, o.responseDeadLine, o.uiLink]
     );
     res.json({ ok: true });
   } catch(err) {
-    console.error("Save prime error:", err.message);
+    console.error("Save opportunity error:", err.message);
     res.status(500).json({ error: err.message });
   }
 });
 
-// Delete a prime
-app.post("/primes/delete", async function(req, res) {
+app.post("/opportunities/delete", async function(req, res) {
   try {
-    var id = req.body.id;
-    await pool.query("DELETE FROM primes WHERE id = $1", [id]);
-    await pool.query("DELETE FROM statuses WHERE id = $1", [id]);
+    await pool.query("DELETE FROM opportunities WHERE notice_id = $1", [req.body.id]);
+    await pool.query("DELETE FROM statuses WHERE id = $1", [req.body.id]);
     res.json({ ok: true });
   } catch(err) {
-    console.error("Delete prime error:", err.message);
+    console.error("Delete opportunity error:", err.message);
     res.status(500).json({ error: err.message });
   }
 });
 
-// Fetch opportunities
 app.get("/opportunities", async function(req, res) {
   try {
     var today = new Date();
@@ -142,7 +131,43 @@ app.get("/opportunities", async function(req, res) {
   }
 });
 
-// AI prime research
+// ── PRIMES ────────────────────────────────────────────────
+app.get("/primes/saved", async function(req, res) {
+  try {
+    var result = await pool.query("SELECT * FROM primes ORDER BY first_seen DESC");
+    res.json(result.rows);
+  } catch(err) {
+    console.error("Load primes error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/primes/saved", async function(req, res) {
+  try {
+    var p = req.body;
+    var pid = p.name.trim().toLowerCase().replace(/\s+/g, "_");
+    await pool.query(
+      "INSERT INTO primes (id, name, reason, signals, url, award_date, first_seen) VALUES ($1,$2,$3,$4,$5,$6,NOW()) ON CONFLICT (id) DO UPDATE SET reason=$3, signals=$4, url=$5, award_date=$6",
+      [pid, p.name, p.reason, JSON.stringify(p.signals || []), p.url || null, p.awardDate || null]
+    );
+    res.json({ ok: true });
+  } catch(err) {
+    console.error("Save prime error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/primes/delete", async function(req, res) {
+  try {
+    await pool.query("DELETE FROM primes WHERE id = $1", [req.body.id]);
+    await pool.query("DELETE FROM statuses WHERE id = $1", [req.body.id]);
+    res.json({ ok: true });
+  } catch(err) {
+    console.error("Delete prime error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.get("/primes", async function(req, res) {
   try {
     console.log("Primes: calling Anthropic API with web search");
@@ -150,8 +175,7 @@ app.get("/primes", async function(req, res) {
     var controller = new AbortController();
     var timeout = setTimeout(function() { controller.abort(); }, 120000);
     var apiRes = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      signal: controller.signal,
+      method: "POST", signal: controller.signal,
       headers: { "Content-Type": "application/json", "Accept": "application/json", "Accept-Encoding": "identity", "x-api-key": ANTHROPIC_API_KEY, "anthropic-version": "2023-06-01" },
       body: JSON.stringify({ model: "claude-haiku-4-5-20251001", max_tokens: 1500, tools: [{ type: "web_search_20250305", name: "web_search" }], messages: [{ role: "user", content: prompt }] })
     });
@@ -171,6 +195,7 @@ app.get("/primes", async function(req, res) {
   }
 });
 
+// ── STARTUP ───────────────────────────────────────────────
 async function startServer() {
   console.log("DATABASE_URL present:", !!process.env.DATABASE_URL);
   try {
@@ -178,6 +203,7 @@ async function startServer() {
     console.log("Database connection OK");
     await pool.query("CREATE TABLE IF NOT EXISTS statuses (id TEXT PRIMARY KEY, type TEXT NOT NULL, status TEXT NOT NULL, updated_at TIMESTAMP DEFAULT NOW())");
     await pool.query("CREATE TABLE IF NOT EXISTS primes (id TEXT PRIMARY KEY, name TEXT NOT NULL, reason TEXT, signals TEXT, url TEXT, award_date TEXT, first_seen TIMESTAMP DEFAULT NOW())");
+    await pool.query("CREATE TABLE IF NOT EXISTS opportunities (notice_id TEXT PRIMARY KEY, title TEXT, agency TEXT, naics_code TEXT, set_aside TEXT, type TEXT, response_deadline TEXT, ui_link TEXT, first_saved TIMESTAMP DEFAULT NOW())");
     console.log("Database ready");
   } catch(err) {
     console.error("Database init error:", err.message);
