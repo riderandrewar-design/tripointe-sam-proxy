@@ -130,6 +130,7 @@ var PAGE_SIZE = 25;
 var opps = [];
 var savedOpps = [];
 var primes = [];
+var oppMap = {}; // lookup by noticeId
 var totalRecords = 0;
 var currentOffset = 0;
 var currentFilter = "All";
@@ -219,6 +220,7 @@ function fetchOpps(offset) {
   }).then(function(data) {
     if (data.error) throw new Error(data.error);
     opps = data.opportunitiesData || [];
+    opps.forEach(function(o) { oppMap[o.noticeId] = o; });
     totalRecords = data.totalRecords || 0;
     var page = Math.floor(offset / PAGE_SIZE) + 1;
     var totalPages = Math.ceil(totalRecords / PAGE_SIZE);
@@ -300,7 +302,7 @@ function renderOpps() {
       '</div>' +
       '<p class="card-meta">' + deadline + due + '</p>' +
       '</div><div class="card-actions">' +
-      '<select onchange="setOppStatus(' + JSON.stringify(o.noticeId) + ', this.value, ' + JSON.stringify(o) + ')">' +
+      '<select onchange="setOppStatus(' + JSON.stringify(o.noticeId) + ', this.value)">' +
         ['Unreviewed','Watching','Pursuing','Pass'].map(function(s) { return '<option' + (s === status ? ' selected' : '') + '>' + s + '</option>'; }).join('') +
       '</select>' +
       (o.uiLink ? '<a class="sam-link" href="' + o.uiLink + '" target="_blank">View on SAM.gov →</a>' : '') +
@@ -311,11 +313,11 @@ function renderOpps() {
   list.innerHTML = html;
 }
 
-function setOppStatus(id, status, opp) {
+function setOppStatus(id, status) {
   oppStatuses[id] = status;
   saveStatus(id, "opp", status);
-  // Auto-save to pipeline when marked
-  if (status === "Watching" || status === "Pursuing") {
+  var opp = oppMap[id];
+  if (opp && (status === "Watching" || status === "Pursuing")) {
     saveOpp(opp);
     if (!savedOpps.some(function(o) { return o.notice_id === id; })) {
       savedOpps.push({ notice_id: id, title: opp.title, agency: opp.fullParentPathName, naics_code: opp.naicsCode, set_aside: opp.typeOfSetAsideDescription, type: opp.type, response_deadline: opp.responseDeadLine, ui_link: opp.uiLink });
