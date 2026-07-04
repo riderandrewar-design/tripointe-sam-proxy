@@ -157,14 +157,21 @@ function loadStatuses(callback) {
 }
 
 function saveStatus(id, type, status) {
+  console.log("Saving status:", id, type, status);
   fetch(PROXY + "/statuses", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ id: id, type: type, status: status })
+  }).then(function(res) {
+    console.log("Status save response:", res.status);
+    return res.json();
+  }).then(function(data) {
+    console.log("Status save result:", JSON.stringify(data));
   }).catch(function(e) { console.error("Save status error:", e.message); });
 }
 
 function saveOpp(o) {
+  console.log("Saving opp:", o.noticeId, o.title);
   fetch(PROXY + "/opportunities/saved", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -173,6 +180,11 @@ function saveOpp(o) {
       naicsCode: o.naicsCode, typeOfSetAsideDescription: o.typeOfSetAsideDescription,
       type: o.type, responseDeadLine: o.responseDeadLine, uiLink: o.uiLink
     })
+  }).then(function(res) {
+    console.log("Opp save response:", res.status);
+    return res.json();
+  }).then(function(data) {
+    console.log("Opp save result:", JSON.stringify(data));
   }).catch(function(e) { console.error("Save opp error:", e.message); });
 }
 
