@@ -474,28 +474,99 @@ function deletePrime(id) {
 function renderPrimes() {
   var list = document.getElementById("prime-list");
   if (primes.length === 0) { list.innerHTML = '<p class="msg-empty">No primes in pipeline yet. Click "Get today\'s picks" to start.</p>'; return; }
-  list.innerHTML = primes.map(function(p) {
+
+  list.innerHTML = "";
+
+  primes.forEach(function(p) {
     var pid = p.id || p.name.trim().toLowerCase().replace(/\s+/g, "_");
     var status = primeStatuses[pid] || "Unreviewed";
     var showOutreach = status === "Interested" || status === "Outreach Pending";
-    var signals = (p.signals || []).map(function(s) { return '<span class="badge badge-purple">' + s + '</span>'; }).join("");
-    var outreachPrompt = showOutreach
-      ? '<div class="outreach-box"><p>Outreach prompt — paste into Claude chat to draft:</p><p class="prompt">Please prepare outreach language for ' + p.name + '. Context: ' + p.reason + ' Signals: ' + (p.signals||[]).join(", ") + '.</p></div>'
-      : "";
-    return '<div class="card"><div class="card-header"><div style="flex:1">' +
-      '<p class="card-title">' + p.name + '</p>' +
-      '<p class="card-agency">' + (p.reason || "") + '</p>' +
-      '<div class="badges">' + signals + '</div>' +
-      (p.url ? '<a class="sam-link" href="' + p.url + '" target="_blank">Teaming / careers page →</a>' : '') +
-      (p.awardDate ? '<p class="card-meta">Award date: ' + p.awardDate + '</p>' : '') +
-      outreachPrompt +
-      '<button class="remove-btn" onclick="deletePrime(\'' + pid + '\')">Remove from pipeline</button>' +
-      '</div><div class="card-actions">' +
-      '<select onchange="setPrimeStatus(\'' + pid + '\', this.value)">' +
-        ['Unreviewed','Interested','Outreach Pending','Pass'].map(function(s) { return '<option' + (s === status ? ' selected' : '') + '>' + s + '</option>'; }).join('') +
-      '</select>' +
-      '</div></div></div>';
-  }).join("");
+
+    var card = document.createElement("div");
+    card.className = "card";
+
+    var header = document.createElement("div");
+    header.className = "card-header";
+
+    var left = document.createElement("div");
+    left.style.flex = "1";
+
+    var title = document.createElement("p");
+    title.className = "card-title";
+    title.textContent = p.name;
+    left.appendChild(title);
+
+    var reason = document.createElement("p");
+    reason.className = "card-agency";
+    reason.textContent = p.reason || "";
+    left.appendChild(reason);
+
+    var badges = document.createElement("div");
+    badges.className = "badges";
+    (p.signals || []).forEach(function(s) {
+      var b = document.createElement("span");
+      b.className = "badge badge-purple";
+      b.textContent = s;
+      badges.appendChild(b);
+    });
+    left.appendChild(badges);
+
+    if (p.url) {
+      var link = document.createElement("a");
+      link.className = "sam-link";
+      link.href = p.url;
+      link.target = "_blank";
+      link.textContent = "Teaming / careers page →";
+      left.appendChild(link);
+    }
+
+    if (p.awardDate) {
+      var meta = document.createElement("p");
+      meta.className = "card-meta";
+      meta.textContent = "Award date: " + p.awardDate;
+      left.appendChild(meta);
+    }
+
+    if (showOutreach) {
+      var box = document.createElement("div");
+      box.className = "outreach-box";
+      var boxLabel = document.createElement("p");
+      boxLabel.textContent = "Outreach prompt — paste into Claude chat to draft:";
+      var boxPrompt = document.createElement("p");
+      boxPrompt.className = "prompt";
+      boxPrompt.textContent = "Please prepare outreach language for " + p.name + ". Context: " + p.reason + " Signals: " + (p.signals||[]).join(", ") + ".";
+      box.appendChild(boxLabel);
+      box.appendChild(boxPrompt);
+      left.appendChild(box);
+    }
+
+    var removeBtn = document.createElement("button");
+    removeBtn.className = "remove-btn";
+    removeBtn.textContent = "Remove from pipeline";
+    (function(id) { removeBtn.addEventListener("click", function() { deletePrime(id); }); })(pid);
+    left.appendChild(removeBtn);
+
+    var right = document.createElement("div");
+    right.className = "card-actions";
+
+    var sel = document.createElement("select");
+    ["Unreviewed","Interested","Outreach Pending","Pass"].forEach(function(s) {
+      var opt = document.createElement("option");
+      opt.value = s;
+      opt.textContent = s;
+      if (s === status) opt.selected = true;
+      sel.appendChild(opt);
+    });
+    (function(id) {
+      sel.addEventListener("change", function() { setPrimeStatus(id, sel.value); });
+    })(pid);
+    right.appendChild(sel);
+
+    header.appendChild(left);
+    header.appendChild(right);
+    card.appendChild(header);
+    list.appendChild(card);
+  });
 }
 
 // Init
