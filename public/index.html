@@ -40,6 +40,7 @@
   .badge-green { background: #EAF3DE; color: #3B6D11; }
   .badge-orange { background: #FAEEDA; color: #854F0B; }
   .badge-purple { background: #EEEDFE; color: #534AB7; }
+  .badge-saved { background: #f0f0ee; color: #666; }
   .card-meta { font-size: 12px; color: #666; }
   .card-actions { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; min-width: 120px; }
   select { font-size: 11px; padding: 3px 6px; border-radius: 6px; border: 1px solid #ddd; cursor: pointer; background: #fff; }
@@ -47,11 +48,13 @@
   .outreach-box { margin-top: 8px; padding: 8px 10px; background: #E6F1FB; border-radius: 6px; border: 1px solid #185FA5; }
   .outreach-box p { font-size: 11px; color: #0C447C; font-weight: 500; margin-bottom: 4px; }
   .outreach-box .prompt { font-size: 11px; color: #185FA5; line-height: 1.5; user-select: all; cursor: text; }
+  .remove-btn { font-size: 11px; color: #A32D2D; background: none; border: none; cursor: pointer; margin-top: 4px; }
   .msg { padding: 12px 16px; border-radius: 8px; font-size: 13px; margin-bottom: 12px; }
   .msg-info { background: #E6F1FB; color: #185FA5; }
   .msg-error { background: #FDECEA; color: #A32D2D; }
   .msg-empty { color: #888; font-size: 13px; }
   .timestamp { font-size: 11px; color: #888; margin-bottom: 10px; }
+  .section-label { font-size: 11px; font-weight: 600; color: #888; text-transform: uppercase; letter-spacing: 0.5px; margin: 12px 0 8px; }
   .footer-note { margin-top: 16px; padding: 12px 14px; background: #f0f0ee; border-radius: 8px; font-size: 12px; color: #888; }
 </style>
 </head>
@@ -93,10 +96,10 @@
     <div class="toolbar">
       <div class="filters">
         <button class="filter-btn active" onclick="filterOpps('All')">All</button>
-        <button class="filter-btn" onclick="filterOpps('Unreviewed')">Unreviewed</button>
         <button class="filter-btn" onclick="filterOpps('Watching')">Watching</button>
         <button class="filter-btn" onclick="filterOpps('Pursuing')">Pursuing</button>
         <button class="filter-btn" onclick="filterOpps('Pass')">Pass</button>
+        <button class="filter-btn" onclick="filterOpps('Pipeline')">My Pipeline</button>
       </div>
       <button class="refresh-btn" onclick="fetchOpps(currentOffset)">Refresh ↺</button>
     </div>
@@ -112,8 +115,8 @@
 
   <div id="tab-primes" style="display:none">
     <div class="toolbar">
-      <p style="font-size:12px;color:#666">AI-researched prime contractors · May take up to 60 seconds · Mark "Interested" to reveal outreach prompt</p>
-      <button class="refresh-btn" onclick="fetchPrimes()">Refresh ↺</button>
+      <p style="font-size:12px;color:#666">Full prime pipeline · AI adds new candidates daily · Mark "Interested" to reveal outreach prompt</p>
+      <button class="refresh-btn" onclick="fetchPrimes()">Get today's picks ↺</button>
     </div>
     <div id="prime-status"></div>
     <div id="prime-list"></div>
@@ -125,6 +128,7 @@
 var PROXY = "https://tripointe-sam-proxy-production.up.railway.app";
 var PAGE_SIZE = 25;
 var opps = [];
+var savedOpps = [];
 var primes = [];
 var totalRecords = 0;
 var currentOffset = 0;
@@ -132,7 +136,15 @@ var currentFilter = "All";
 var oppStatuses = {};
 var primeStatuses = {};
 
-// Load all statuses from database on startup
+function switchTab(tab) {
+  document.getElementById("tab-opps").style.display = tab === "opps" ? "" : "none";
+  document.getElementById("tab-primes").style.display = tab === "primes" ? "" : "none";
+  document.querySelectorAll(".tab").forEach(function(el, i) {
+    el.classList.toggle("active", (i === 0 && tab === "opps") || (i === 1 && tab === "primes"));
+  });
+  if (tab === "primes" && primes.length === 0) loadSavedPrimes();
+}
+
 function loadStatuses(callback) {
   fetch(PROXY + "/statuses").then(function(res) { return res.json(); }).then(function(data) {
     Object.keys(data).forEach(function(id) {
@@ -140,9 +152,7 @@ function loadStatuses(callback) {
       if (data[id].type === "prime") primeStatuses[id] = data[id].status;
     });
     if (callback) callback();
-  }).catch(function() {
-    if (callback) callback();
-  });
+  }).catch(function() { if (callback) callback(); });
 }
 
 function saveStatus(id, type, status) {
@@ -153,21 +163,20 @@ function saveStatus(id, type, status) {
   }).catch(function(e) { console.error("Save status error:", e.message); });
 }
 
-function switchTab(tab) {
-  document.getElementById("tab-opps").style.display = tab === "opps" ? "" : "none";
-  document.getElementById("tab-primes").style.display = tab === "primes" ? "" : "none";
-  document.querySelectorAll(".tab").forEach(function(el, i) {
-    el.classList.toggle("active", (i === 0 && tab === "opps") || (i === 1 && tab === "primes"));
-  });
-  if (tab === "primes" && primes.length === 0) fetchPrimes();
+function saveOpp(o) {
+  fetch(PROXY + "/opportunities/saved", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      noticeId: o.noticeId, title: o.title, agency: o.fullParentPathName,
+      naicsCode: o.naicsCode, typeOfSetAsideDescription: o.typeOfSetAsideDescription,
+      type: o.type, responseDeadLine: o.responseDeadLine, uiLink: o.uiLink
+    })
+  }).catch(function(e) { console.error("Save opp error:", e.message); });
 }
 
-function saveOppStatuses() {}
-function savePrimeStatuses() {}
-
 function updateTiles() {
-  var pursuing = 0;
-  var watching = 0;
+  var pursuing = 0, watching = 0;
   Object.keys(oppStatuses).forEach(function(id) {
     if (oppStatuses[id] === "Pursuing") pursuing++;
     if (oppStatuses[id] === "Watching") watching++;
@@ -200,7 +209,6 @@ function fetchOpps(offset) {
   var pTo = encodeURIComponent(fmt(today));
   var keyword = document.getElementById("keyword").value.trim();
   var setaside = document.getElementById("setaside-filter").value;
-
   var url = PROXY + "/opportunities?naicsCode=541512,541519,541330,541690&limit=" + PAGE_SIZE + "&offset=" + offset + "&postedFrom=" + pFrom + "&postedTo=" + pTo;
   if (keyword) url += "&q=" + encodeURIComponent(keyword);
   if (setaside) url += "&typeOfSetAside=" + setaside;
@@ -215,12 +223,11 @@ function fetchOpps(offset) {
     var page = Math.floor(offset / PAGE_SIZE) + 1;
     var totalPages = Math.ceil(totalRecords / PAGE_SIZE);
     document.getElementById("opp-status").innerHTML = "";
-    document.getElementById("opp-timestamp").textContent = "Last fetched: " + new Date().toLocaleString() + " · Page " + page + " of " + totalPages.toLocaleString() + " (" + totalRecords.toLocaleString() + " total)";
+    document.getElementById("opp-timestamp").textContent = "SAM.gov — Last fetched: " + new Date().toLocaleString() + " · Page " + page + " of " + totalPages.toLocaleString() + " (" + totalRecords.toLocaleString() + " total)";
     document.getElementById("page-info").textContent = "Page " + page + " of " + totalPages.toLocaleString();
     document.getElementById("btn-prev").disabled = offset === 0;
     document.getElementById("btn-next").disabled = offset + PAGE_SIZE >= totalRecords;
     renderOpps();
-    updateTiles();
   }).catch(function(e) {
     document.getElementById("opp-status").innerHTML = '<div class="msg msg-error">Error: ' + e.message + '</div>';
   });
@@ -237,75 +244,131 @@ function filterOpps(f) {
 
 function renderOpps() {
   var list = document.getElementById("opp-list");
-  var filtered = currentFilter === "All" ? opps : opps.filter(function(o) { return (oppStatuses[o.noticeId] || "Unreviewed") === currentFilter; });
+
+  // Merge SAM.gov results with saved pipeline
+  var savedIds = {};
+  savedOpps.forEach(function(o) { savedIds[o.notice_id] = true; });
+  var liveIds = {};
+  opps.forEach(function(o) { liveIds[o.noticeId] = true; });
+
+  // Pipeline opps not in current SAM results
+  var pipelineOnly = savedOpps.filter(function(o) {
+    var s = oppStatuses[o.notice_id] || "Unreviewed";
+    return !liveIds[o.notice_id] && s !== "Pass" && s !== "Unreviewed";
+  }).map(function(o) {
+    return { noticeId: o.notice_id, title: o.title, fullParentPathName: o.agency, naicsCode: o.naics_code, typeOfSetAsideDescription: o.set_aside, type: o.type, responseDeadLine: o.response_deadline, uiLink: o.ui_link, fromPipeline: true };
+  });
+
+  var allOpps = opps.concat(pipelineOnly);
+
+  var filtered;
+  if (currentFilter === "All") {
+    filtered = allOpps;
+  } else if (currentFilter === "Pipeline") {
+    filtered = allOpps.filter(function(o) {
+      var s = oppStatuses[o.noticeId] || "Unreviewed";
+      return s === "Watching" || s === "Pursuing";
+    });
+  } else {
+    filtered = allOpps.filter(function(o) { return (oppStatuses[o.noticeId] || "Unreviewed") === currentFilter; });
+  }
+
   if (filtered.length === 0) { list.innerHTML = '<p class="msg-empty">No opportunities match this filter.</p>'; return; }
-  list.innerHTML = filtered.map(function(o) {
+
+  // Show pipeline section header if mixed
+  var html = "";
+  if (currentFilter === "All" && pipelineOnly.length > 0) {
+    html += '<p class="section-label">Today\'s SAM.gov results</p>';
+  }
+
+  filtered.forEach(function(o, idx) {
+    if (currentFilter === "All" && o.fromPipeline && idx > 0 && !filtered[idx-1].fromPipeline) {
+      html += '<p class="section-label">Your saved pipeline</p>';
+    }
     var status = oppStatuses[o.noticeId] || "Unreviewed";
     var daysLeft = o.responseDeadLine ? Math.ceil((new Date(o.responseDeadLine) - Date.now()) / 86400000) : null;
     var deadline = daysLeft !== null ? (daysLeft > 0 ? daysLeft + "d remaining" : "Past due") : "No deadline";
     var due = o.responseDeadLine ? " · Due " + new Date(o.responseDeadLine).toLocaleDateString() : "";
-    return '<div class="card"><div class="card-header"><div style="flex:1">' +
+    html += '<div class="card"><div class="card-header"><div style="flex:1">' +
       '<p class="card-title">' + (o.title || "Untitled") + '</p>' +
       '<p class="card-agency">' + (o.fullParentPathName || "Agency N/A") + '</p>' +
       '<div class="badges">' +
         (o.naicsCode ? '<span class="badge badge-blue">' + o.naicsCode + '</span>' : '') +
         (o.typeOfSetAsideDescription ? '<span class="badge badge-green">' + o.typeOfSetAsideDescription + '</span>' : '') +
         (o.type ? '<span class="badge badge-orange">' + o.type + '</span>' : '') +
+        (o.fromPipeline ? '<span class="badge badge-saved">Saved</span>' : '') +
       '</div>' +
       '<p class="card-meta">' + deadline + due + '</p>' +
       '</div><div class="card-actions">' +
-      '<select onchange="setOppStatus(\'' + o.noticeId + '\', this.value)">' +
+      '<select onchange="setOppStatus(' + JSON.stringify(o.noticeId) + ', this.value, ' + JSON.stringify(o) + ')">' +
         ['Unreviewed','Watching','Pursuing','Pass'].map(function(s) { return '<option' + (s === status ? ' selected' : '') + '>' + s + '</option>'; }).join('') +
       '</select>' +
       (o.uiLink ? '<a class="sam-link" href="' + o.uiLink + '" target="_blank">View on SAM.gov →</a>' : '') +
+      (savedIds[o.noticeId] ? '<button class="remove-btn" onclick="deleteOpp(' + JSON.stringify(o.noticeId) + ')">Remove from pipeline</button>' : '') +
       '</div></div></div>';
-  }).join("");
+  });
+
+  list.innerHTML = html;
 }
 
-function setOppStatus(id, status) {
+function setOppStatus(id, status, opp) {
   oppStatuses[id] = status;
   saveStatus(id, "opp", status);
+  // Auto-save to pipeline when marked
+  if (status === "Watching" || status === "Pursuing") {
+    saveOpp(opp);
+    if (!savedOpps.some(function(o) { return o.notice_id === id; })) {
+      savedOpps.push({ notice_id: id, title: opp.title, agency: opp.fullParentPathName, naics_code: opp.naicsCode, set_aside: opp.typeOfSetAsideDescription, type: opp.type, response_deadline: opp.responseDeadLine, ui_link: opp.uiLink });
+    }
+  }
   updateTiles();
+  renderOpps();
+}
+
+function deleteOpp(id) {
+  if (!confirm("Remove this opportunity from your pipeline?")) return;
+  fetch(PROXY + "/opportunities/delete", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id: id })
+  }).then(function() {
+    savedOpps = savedOpps.filter(function(o) { return o.notice_id !== id; });
+    delete oppStatuses[id];
+    updateTiles();
+    renderOpps();
+  }).catch(function(e) { console.error("Delete opp error:", e.message); });
+}
+
+function loadSavedPrimes() {
+  document.getElementById("prime-status").innerHTML = '<div class="msg msg-info">Loading your prime pipeline...</div>';
+  fetch(PROXY + "/primes/saved").then(function(res) { return res.json(); }).then(function(saved) {
+    primes = (Array.isArray(saved) ? saved : []).map(function(p) {
+      return { id: p.id, name: p.name, reason: p.reason, signals: typeof p.signals === "string" ? JSON.parse(p.signals) : (p.signals || []), url: p.url, awardDate: p.award_date };
+    });
+    document.getElementById("prime-status").innerHTML = primes.length === 0 ? '<div class="msg msg-info">No primes saved yet. Click "Get today\'s picks" to start.</div>' : "";
+    renderPrimes();
+    updateTiles();
+  }).catch(function(e) {
+    document.getElementById("prime-status").innerHTML = '<div class="msg msg-error">Error loading primes: ' + e.message + '</div>';
+  });
 }
 
 function fetchPrimes() {
   document.getElementById("prime-status").innerHTML = '<div class="msg msg-info">⏳ AI is researching new prime contractors — please wait up to 60 seconds...</div>';
-  document.getElementById("prime-list").innerHTML = "";
-
-  // First load saved primes from database
-  fetch(PROXY + "/primes/saved").then(function(res) { return res.json(); }).then(function(saved) {
-    // Normalize saved primes
-    primes = (Array.isArray(saved) ? saved : []).map(function(p) {
-      return {
-        id: p.id,
-        name: p.name,
-        reason: p.reason,
-        signals: typeof p.signals === "string" ? JSON.parse(p.signals) : (p.signals || []),
-        url: p.url,
-        awardDate: p.award_date,
-        saved: true
-      };
-    });
-    renderPrimes();
-    updateTiles();
-
-    // Then fetch new AI recommendations
-    return fetch(PROXY + "/primes");
-  }).then(function(res) {
+  fetch(PROXY + "/primes").then(function(res) {
     if (!res.ok) throw new Error("Server returned " + res.status);
     return res.json();
   }).then(function(newPrimes) {
     if (newPrimes.error) throw new Error(newPrimes.error);
     document.getElementById("prime-status").innerHTML = "";
-
-    // Merge new primes into existing list, save new ones to database
+    var added = 0;
     newPrimes.forEach(function(p) {
       var pid = p.name.trim().toLowerCase().replace(/\s+/g, "_");
       var exists = primes.some(function(existing) { return existing.id === pid; });
       if (!exists) {
         p.id = pid;
         primes.unshift(p);
-        // Save to database
+        added++;
         fetch(PROXY + "/primes/saved", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -313,11 +376,21 @@ function fetchPrimes() {
         }).catch(function(e) { console.error("Save prime error:", e.message); });
       }
     });
+    if (added === 0) {
+      document.getElementById("prime-status").innerHTML = '<div class="msg msg-info">No new primes today — all recommendations already in your pipeline.</div>';
+    }
     renderPrimes();
     updateTiles();
   }).catch(function(e) {
-    document.getElementById("prime-status").innerHTML = '<div class="msg msg-error">Error loading primes: ' + e.message + '</div>';
+    document.getElementById("prime-status").innerHTML = '<div class="msg msg-error">Error: ' + e.message + '</div>';
   });
+}
+
+function setPrimeStatus(id, status) {
+  primeStatuses[id] = status;
+  saveStatus(id, "prime", status);
+  renderPrimes();
+  updateTiles();
 }
 
 function deletePrime(id) {
@@ -334,18 +407,11 @@ function deletePrime(id) {
   }).catch(function(e) { console.error("Delete prime error:", e.message); });
 }
 
-function setPrimeStatus(id, status) {
-  primeStatuses[id] = status;
-  saveStatus(id, "prime", status);
-  renderPrimes();
-  updateTiles();
-}
-
 function renderPrimes() {
   var list = document.getElementById("prime-list");
-  if (primes.length === 0) { list.innerHTML = '<p class="msg-empty">No primes loaded. Click Refresh.</p>'; return; }
+  if (primes.length === 0) { list.innerHTML = '<p class="msg-empty">No primes in pipeline yet. Click "Get today\'s picks" to start.</p>'; return; }
   list.innerHTML = primes.map(function(p) {
-    var pid = p.id || p.name;
+    var pid = p.id || p.name.trim().toLowerCase().replace(/\s+/g, "_");
     var status = primeStatuses[pid] || "Unreviewed";
     var showOutreach = status === "Interested" || status === "Outreach Pending";
     var signals = (p.signals || []).map(function(s) { return '<span class="badge badge-purple">' + s + '</span>'; }).join("");
@@ -359,7 +425,7 @@ function renderPrimes() {
       (p.url ? '<a class="sam-link" href="' + p.url + '" target="_blank">Teaming / careers page →</a>' : '') +
       (p.awardDate ? '<p class="card-meta">Award date: ' + p.awardDate + '</p>' : '') +
       outreachPrompt +
-      '<button onclick="deletePrime(\'' + pid + '\')" style="font-size:11px;color:#A32D2D;background:none;border:none;cursor:pointer;margin-top:6px;">Remove from pipeline</button>' +
+      '<button class="remove-btn" onclick="deletePrime(\'' + pid + '\')">Remove from pipeline</button>' +
       '</div><div class="card-actions">' +
       '<select onchange="setPrimeStatus(\'' + pid + '\', this.value)">' +
         ['Unreviewed','Interested','Outreach Pending','Pass'].map(function(s) { return '<option' + (s === status ? ' selected' : '') + '>' + s + '</option>'; }).join('') +
@@ -368,7 +434,15 @@ function renderPrimes() {
   }).join("");
 }
 
-loadStatuses(function() { updateTiles(); fetchOpps(0); });
+// Init
+loadStatuses(function() {
+  // Load saved opportunities
+  fetch(PROXY + "/opportunities/saved").then(function(res) { return res.json(); }).then(function(saved) {
+    savedOpps = Array.isArray(saved) ? saved : [];
+    updateTiles();
+    fetchOpps(0);
+  }).catch(function() { fetchOpps(0); });
+});
 </script>
 </body>
 </html>
