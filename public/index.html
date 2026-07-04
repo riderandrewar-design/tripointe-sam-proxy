@@ -259,13 +259,11 @@ function filterOpps(f) {
 function renderOpps() {
   var list = document.getElementById("opp-list");
 
-  // Merge SAM.gov results with saved pipeline
   var savedIds = {};
   savedOpps.forEach(function(o) { savedIds[o.notice_id] = true; });
   var liveIds = {};
   opps.forEach(function(o) { liveIds[o.noticeId] = true; });
 
-  // Pipeline opps not in current SAM results
   var pipelineOnly = savedOpps.filter(function(o) {
     var s = oppStatuses[o.notice_id] || "Unreviewed";
     return !liveIds[o.notice_id] && s !== "Pass" && s !== "Unreviewed";
@@ -289,46 +287,98 @@ function renderOpps() {
 
   if (filtered.length === 0) { list.innerHTML = '<p class="msg-empty">No opportunities match this filter.</p>'; return; }
 
-  // Show pipeline section header if mixed
-  var html = "";
-  if (currentFilter === "All" && pipelineOnly.length > 0) {
-    html += '<p class="section-label">Today\'s SAM.gov results</p>';
-  }
+  list.innerHTML = "";
 
   filtered.forEach(function(o, idx) {
     if (currentFilter === "All" && o.fromPipeline && idx > 0 && !filtered[idx-1].fromPipeline) {
-      html += '<p class="section-label">Your saved pipeline</p>';
+      var lbl = document.createElement("p");
+      lbl.className = "section-label";
+      lbl.textContent = "Your saved pipeline";
+      list.appendChild(lbl);
     }
+
     var status = oppStatuses[o.noticeId] || "Unreviewed";
     var daysLeft = o.responseDeadLine ? Math.ceil((new Date(o.responseDeadLine) - Date.now()) / 86400000) : null;
     var deadline = daysLeft !== null ? (daysLeft > 0 ? daysLeft + "d remaining" : "Past due") : "No deadline";
     var due = o.responseDeadLine ? " · Due " + new Date(o.responseDeadLine).toLocaleDateString() : "";
-    html += '<div class="card"><div class="card-header"><div style="flex:1">' +
-      '<p class="card-title">' + (o.title || "Untitled") + '</p>' +
-      '<p class="card-agency">' + (o.fullParentPathName || "Agency N/A") + '</p>' +
-      '<div class="badges">' +
-        (o.naicsCode ? '<span class="badge badge-blue">' + o.naicsCode + '</span>' : '') +
-        (o.typeOfSetAsideDescription ? '<span class="badge badge-green">' + o.typeOfSetAsideDescription + '</span>' : '') +
-        (o.type ? '<span class="badge badge-orange">' + o.type + '</span>' : '') +
-        (o.fromPipeline ? '<span class="badge badge-saved">Saved</span>' : '') +
-      '</div>' +
-      '<p class="card-meta">' + deadline + due + '</p>' +
-      '</div><div class="card-actions">' +
-      '<select onchange="setOppStatus(' + JSON.stringify(o.noticeId) + ', this.value)">' +
-        ['Unreviewed','Watching','Pursuing','Pass'].map(function(s) { return '<option' + (s === status ? ' selected' : '') + '>' + s + '</option>'; }).join('') +
-      '</select>' +
-      (o.uiLink ? '<a class="sam-link" href="' + o.uiLink + '" target="_blank">View on SAM.gov →</a>' : '') +
-      (savedIds[o.noticeId] ? '<button class="remove-btn" onclick="deleteOpp(' + JSON.stringify(o.noticeId) + ')">Remove from pipeline</button>' : '') +
-      '</div></div></div>';
-  });
 
-  list.innerHTML = html;
+    var card = document.createElement("div");
+    card.className = "card";
+
+    var header = document.createElement("div");
+    header.className = "card-header";
+
+    var left = document.createElement("div");
+    left.style.flex = "1";
+
+    var title = document.createElement("p");
+    title.className = "card-title";
+    title.textContent = o.title || "Untitled";
+    left.appendChild(title);
+
+    var agency = document.createElement("p");
+    agency.className = "card-agency";
+    agency.textContent = o.fullParentPathName || "Agency N/A";
+    left.appendChild(agency);
+
+    var badges = document.createElement("div");
+    badges.className = "badges";
+    if (o.naicsCode) { var b1 = document.createElement("span"); b1.className = "badge badge-blue"; b1.textContent = o.naicsCode; badges.appendChild(b1); }
+    if (o.typeOfSetAsideDescription) { var b2 = document.createElement("span"); b2.className = "badge badge-green"; b2.textContent = o.typeOfSetAsideDescription; badges.appendChild(b2); }
+    if (o.type) { var b3 = document.createElement("span"); b3.className = "badge badge-orange"; b3.textContent = o.type; badges.appendChild(b3); }
+    if (o.fromPipeline) { var b4 = document.createElement("span"); b4.className = "badge badge-saved"; b4.textContent = "Saved"; badges.appendChild(b4); }
+    left.appendChild(badges);
+
+    var meta = document.createElement("p");
+    meta.className = "card-meta";
+    meta.textContent = deadline + due;
+    left.appendChild(meta);
+
+    var right = document.createElement("div");
+    right.className = "card-actions";
+
+    var sel = document.createElement("select");
+    ["Unreviewed","Watching","Pursuing","Pass"].forEach(function(s) {
+      var opt = document.createElement("option");
+      opt.value = s;
+      opt.textContent = s;
+      if (s === status) opt.selected = true;
+      sel.appendChild(opt);
+    });
+    (function(noticeId, oppObj) {
+      sel.addEventListener("change", function() {
+        setOppStatus(noticeId, sel.value, oppObj);
+      });
+    })(o.noticeId, o);
+    right.appendChild(sel);
+
+    if (o.uiLink) {
+      var link = document.createElement("a");
+      link.className = "sam-link";
+      link.href = o.uiLink;
+      link.target = "_blank";
+      link.textContent = "View on SAM.gov →";
+      right.appendChild(link);
+    }
+
+    if (savedIds[o.noticeId]) {
+      var removeBtn = document.createElement("button");
+      removeBtn.className = "remove-btn";
+      removeBtn.textContent = "Remove from pipeline";
+      (function(id) { removeBtn.addEventListener("click", function() { deleteOpp(id); }); })(o.noticeId);
+      right.appendChild(removeBtn);
+    }
+
+    header.appendChild(left);
+    header.appendChild(right);
+    card.appendChild(header);
+    list.appendChild(card);
+  });
 }
 
-function setOppStatus(id, status) {
+function setOppStatus(id, status, opp) {
   oppStatuses[id] = status;
   saveStatus(id, "opp", status);
-  var opp = oppMap[id];
   if (opp && (status === "Watching" || status === "Pursuing")) {
     saveOpp(opp);
     if (!savedOpps.some(function(o) { return o.notice_id === id; })) {
