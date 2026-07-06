@@ -98,8 +98,8 @@
         <button class="filter-btn active" onclick="filterOpps('All')">All</button>
         <button class="filter-btn" onclick="filterOpps('Watching')">Watching</button>
         <button class="filter-btn" onclick="filterOpps('Pursuing')">Pursuing</button>
-        <button class="filter-btn" onclick="filterOpps('Pass')">Pass</button>
         <button class="filter-btn" onclick="filterOpps('Pipeline')">My Pipeline</button>
+        <button class="filter-btn" id="pass-toggle" onclick="togglePass()" style="color:#A32D2D;border-color:#A32D2D;">Pass: hidden</button>
       </div>
       <button class="refresh-btn" onclick="fetchOpps(currentOffset)">Refresh ↺</button>
     </div>
@@ -134,6 +134,7 @@ var oppMap = {}; // lookup by noticeId
 var totalRecords = 0;
 var currentOffset = 0;
 var currentFilter = "All";
+var showPass = false;
 var oppStatuses = {};
 var primeStatuses = {};
 
@@ -250,6 +251,14 @@ function fetchOpps(offset) {
 function prevPage() { if (currentOffset >= PAGE_SIZE) fetchOpps(currentOffset - PAGE_SIZE); }
 function nextPage() { fetchOpps(currentOffset + PAGE_SIZE); }
 
+function togglePass() {
+  showPass = !showPass;
+  var btn = document.getElementById("pass-toggle");
+  btn.textContent = showPass ? "Pass: visible" : "Pass: hidden";
+  btn.style.background = showPass ? "#FDECEA" : "";
+  renderOpps();
+}
+
 function filterOpps(f) {
   currentFilter = f;
   document.querySelectorAll(".filter-btn").forEach(function(btn) { btn.classList.toggle("active", btn.textContent === f); });
@@ -275,7 +284,10 @@ function renderOpps() {
 
   var filtered;
   if (currentFilter === "All") {
-    filtered = allOpps;
+    filtered = allOpps.filter(function(o) {
+      var s = oppStatuses[o.noticeId] || "Unreviewed";
+      return showPass ? true : s !== "Pass";
+    });
   } else if (currentFilter === "Pipeline") {
     filtered = allOpps.filter(function(o) {
       var s = oppStatuses[o.noticeId] || "Unreviewed";
