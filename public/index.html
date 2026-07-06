@@ -286,7 +286,7 @@ function renderOpps() {
   if (currentFilter === "All") {
     filtered = allOpps.filter(function(o) {
       var s = oppStatuses[o.noticeId] || "Unreviewed";
-      return showPass ? true : s !== "Pass";
+      return showPass || s !== "Pass";
     });
   } else if (currentFilter === "Pipeline") {
     filtered = allOpps.filter(function(o) {
@@ -294,7 +294,9 @@ function renderOpps() {
       return s === "Watching" || s === "Pursuing";
     });
   } else {
-    filtered = allOpps.filter(function(o) { return (oppStatuses[o.noticeId] || "Unreviewed") === currentFilter; });
+    filtered = allOpps.filter(function(o) {
+      return (oppStatuses[o.noticeId] || "Unreviewed") === currentFilter;
+    });
   }
 
   if (filtered.length === 0) { list.innerHTML = '<p class="msg-empty">No opportunities match this filter.</p>'; return; }
