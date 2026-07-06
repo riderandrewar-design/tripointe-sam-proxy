@@ -228,9 +228,11 @@ function fetchOpps(offset) {
   if (setaside) url += "&typeOfSetAside=" + setaside;
 
   fetch(url).then(function(res) {
+    console.log("Opportunities fetch status:", res.status);
     if (!res.ok) throw new Error("Server returned " + res.status);
     return res.json();
   }).then(function(data) {
+    console.log("Opportunities data:", data.totalRecords, "records,", (data.opportunitiesData||[]).length, "returned");
     if (data.error) throw new Error(data.error);
     opps = data.opportunitiesData || [];
     opps.forEach(function(o) { oppMap[o.noticeId] = o; });
